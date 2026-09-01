@@ -1,0 +1,19 @@
+{
+  "day": "tomorrow",
+  "results_per_search": 5,
+  "request_timeout_seconds": 30,
+  "discord_username": "FuelWatch WA",
+  "message": "⛽ Tomorrow's cheapest fuel prices",
+  "schedule": {
+    "hour": 14,
+    "minute": 40,
+    "timezone": "Australia/Perth"
+  },
+  "searches": [
+    { "product": 4, "suburb": "Perth", "surrounding": false },
+    { "product": 4, "suburb": "Quinns Rocks", "surrounding": false },
+    { "product": 4, "suburb": "Bayswater", "surrounding": false },
+    { "product": 1, "suburb": "Bayswater", "surrounding": false },
+    { "product": 1, "suburb": "Balcatta", "surrounding": false }
+  ]
+}

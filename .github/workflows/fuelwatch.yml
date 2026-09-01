@@ -1,0 +1,22 @@
+name: Daily FuelWatch notification
+
+on:
+  schedule:
+    # 06:40 UTC is 14:40 AWST. Perth does not observe daylight saving time.
+    - cron: "40 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Send FuelWatch notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python fuelwatch_bot.py --once
