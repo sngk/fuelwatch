@@ -32,6 +32,7 @@ PRODUCTS = {
 }
 USER_AGENT = "fuelwatch-discord-bot/1.0"
 DISCORD_DESCRIPTION_LIMIT = 4096
+DISCORD_EMBEDS_TOTAL_LIMIT = 5500  # Leave headroom below Discord's 6,000-character limit.
 
 
 @dataclass(frozen=True)
@@ -266,6 +267,42 @@ def send_discord(webhook_url: str, payload: dict[str, Any], timeout: int) -> Non
             raise RuntimeError(f"Discord returned HTTP {response.status}")
 
 
+def _embed_text_length(embed: dict[str, Any]) -> int:
+    """Count characters Discord includes in its aggregate embed text limit."""
+    total = len(str(embed.get("title", ""))) + len(str(embed.get("description", "")))
+    total += len(str(embed.get("footer", {}).get("text", "")))
+    total += len(str(embed.get("author", {}).get("name", "")))
+    for field in embed.get("fields", []):
+        total += len(str(field.get("name", ""))) + len(str(field.get("value", "")))
+    return total
+
+
+def split_discord_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Split embeds into messages that remain safely inside Discord API limits."""
+    groups: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    current_length = 0
+    for embed in payload.get("embeds", []):
+        embed_length = _embed_text_length(embed)
+        if current and (current_length + embed_length > DISCORD_EMBEDS_TOTAL_LIMIT or len(current) >= 10):
+            groups.append(current)
+            current = []
+            current_length = 0
+        current.append(embed)
+        current_length += embed_length
+    if current or not groups:
+        groups.append(current)
+
+    messages: list[dict[str, Any]] = []
+    for index, embeds in enumerate(groups, 1):
+        message = {key: value for key, value in payload.items() if key != "embeds"}
+        message["embeds"] = embeds
+        if index > 1:
+            message["content"] = f"⛽ FuelWatch update — continued ({index}/{len(groups)})"
+        messages.append(message)
+    return messages
+
+
 def run_once(config: dict[str, Any], dry_run: bool = False) -> None:
     timeout = int(config.get("request_timeout_seconds", 30))
     results = []
@@ -282,8 +319,10 @@ def run_once(config: dict[str, Any], dry_run: bool = False) -> None:
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         raise ValueError("DISCORD_WEBHOOK_URL environment variable is required")
-    send_discord(webhook_url, payload, timeout)
-    logging.info("Notification sent to Discord")
+    messages = split_discord_payload(payload)
+    for index, message in enumerate(messages, 1):
+        send_discord(webhook_url, message, timeout)
+        logging.info("Discord message %d/%d sent", index, len(messages))
 
 
 def next_run(now: datetime, hour: int, minute: int) -> datetime:

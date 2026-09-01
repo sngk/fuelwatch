@@ -60,6 +60,19 @@ class BotTests(unittest.TestCase):
         self.assertEqual(payload["embeds"][0]["title"], "⛽ DIESEL")
         self.assertIn("📍 **PERTH + NEARBY**", payload["embeds"][0]["description"])
 
+    def test_large_discord_payload_is_split(self):
+        embed = {"title": "Fuel", "description": "x" * 2000, "fields": []}
+        payload = {"content": "Update", "embeds": [embed, embed, embed]}
+        messages = bot.split_discord_payload(payload)
+        self.assertEqual(len(messages), 2)
+        self.assertEqual([len(message["embeds"]) for message in messages], [2, 1])
+        self.assertIn("continued (2/2)", messages[1]["content"])
+        for message in messages:
+            self.assertLessEqual(
+                sum(bot._embed_text_length(item) for item in message["embeds"]),
+                bot.DISCORD_EMBEDS_TOTAL_LIMIT,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
