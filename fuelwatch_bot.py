@@ -113,6 +113,13 @@ def _station_key(station: Station) -> tuple[str, str]:
     return (station.name.casefold().strip(), station.address.casefold().strip())
 
 
+def google_maps_url(station: Station) -> str:
+    query = ", ".join(
+        value for value in (station.name, station.address, station.suburb, "WA") if value
+    )
+    return "https://www.google.com/maps/search/?api=1&" + urllib.parse.urlencode({"query": query})
+
+
 def _price_line(station: Station, number: int, comparison: dict[tuple[str, str], float] | None = None) -> str:
     place = " — ".join(value for value in (station.name, station.brand) if value)
     location = ", ".join(value for value in (station.address, station.suburb) if value)
@@ -165,8 +172,13 @@ def format_compact_list(
                 change = f" · ↓{abs(difference):.1f}"
             else:
                 change = f" · ↑{difference:.1f}"
-        suburb = f" ({station.suburb.title()})" if station.suburb else ""
-        lines.append(f"`{number}` **{station.price}**{change}\n{station.name}{suburb}")
+        map_link = google_maps_url(station)
+        location = ", ".join(value for value in (station.address, station.suburb.title()) if value)
+        lines.append(
+            f"`{number}` **{station.price}**{change}\n"
+            f"[{station.name}]({map_link})\n"
+            f"{location}"
+        )
     return "\n\n".join(lines)
 
 
@@ -209,11 +221,12 @@ def build_payload(
             if (price := _price_number(station)) is not None
         }
         description = (
-            comparison_summary(today, tomorrow)
+            f"📍 **{search['suburb'].upper()} + NEARBY**\n"
+            f"{comparison_summary(today, tomorrow)}"
         )
         embeds.append(
             {
-                "title": f"{product_name} — {search['suburb']}",
+                "title": f"⛽ {product_name.upper()}",
                 "description": description[:DISCORD_DESCRIPTION_LIMIT],
                 "color": 0x2D7D46,
                 "fields": [

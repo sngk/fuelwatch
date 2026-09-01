@@ -38,12 +38,17 @@ class BotTests(unittest.TestCase):
         line = bot._price_line(station, 1, {bot._station_key(station): 180.0})
         self.assertIn("1.5 c/L dearer", line)
 
-    def test_compact_list_omits_address(self):
+    def test_compact_list_links_map_and_includes_address(self):
         station = bot.Station("181.5", "Same Fuel", "Brand", "PERTH", "1 Secret Road", "")
         text = bot.format_compact_list([station], 3, {bot._station_key(station): 180.0})
         self.assertIn("↑1.5", text)
-        self.assertIn("Same Fuel (Perth)", text)
-        self.assertNotIn("Secret Road", text)
+        self.assertIn("[Same Fuel](https://www.google.com/maps/search/", text)
+        self.assertIn("1 Secret Road, Perth", text)
+
+    def test_google_maps_link_contains_station_address(self):
+        station = bot.Station("180.0", "Test Fuel", "", "PERTH", "1 Test Road", "")
+        url = bot.google_maps_url(station)
+        self.assertIn("query=Test+Fuel%2C+1+Test+Road%2C+PERTH%2C+WA", url)
 
     def test_embed_title_has_no_rss_link(self):
         station = bot.Station("180.0", "Test Fuel", "", "PERTH", "1 Road", "")
@@ -52,6 +57,8 @@ class BotTests(unittest.TestCase):
         payload = bot.build_payload(config, [(search, [station], [station], "https://rss.test")])
         self.assertNotIn("url", payload["embeds"][0])
         self.assertEqual(len(payload["embeds"][0]["fields"]), 2)
+        self.assertEqual(payload["embeds"][0]["title"], "⛽ DIESEL")
+        self.assertIn("📍 **PERTH + NEARBY**", payload["embeds"][0]["description"])
 
 
 if __name__ == "__main__":
