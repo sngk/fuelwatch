@@ -144,6 +144,32 @@ def format_station_list(stations: list[Station], limit: int, comparison: dict[tu
     return "\n".join(lines)
 
 
+def format_compact_list(
+    stations: list[Station],
+    limit: int,
+    comparison: dict[tuple[str, str], float] | None = None,
+) -> str:
+    """Format a short Discord embed column without addresses or repeated labels."""
+    if not stations:
+        return "_Not available yet_"
+    lines: list[str] = []
+    for number, station in enumerate(stations[:limit], 1):
+        price = _price_number(station)
+        change = ""
+        previous = comparison.get(_station_key(station)) if comparison and price is not None else None
+        if previous is not None and price is not None:
+            difference = price - previous
+            if abs(difference) < 0.05:
+                change = " · ="
+            elif difference < 0:
+                change = f" · ↓{abs(difference):.1f}"
+            else:
+                change = f" · ↑{difference:.1f}"
+        suburb = f" ({station.suburb.title()})" if station.suburb else ""
+        lines.append(f"`{number}` **{station.price}**{change}\n{station.name}{suburb}")
+    return "\n\n".join(lines)
+
+
 def comparison_summary(today: list[Station], tomorrow: list[Station]) -> str:
     today_prices = [(price, station) for station in today if (price := _price_number(station)) is not None]
     tomorrow_prices = [(price, station) for station in tomorrow if (price := _price_number(station)) is not None]
@@ -174,7 +200,7 @@ def build_payload(
     results: list[tuple[dict[str, Any], list[Station], list[Station], str]],
 ) -> dict[str, Any]:
     embeds = []
-    for search, today, tomorrow, source_url in results:
+    for search, today, tomorrow, _source_url in results:
         product_name = PRODUCTS[search["product"]]
         limit = int(search.get("limit", config.get("results_per_search", 5)))
         today_by_station = {
@@ -183,22 +209,32 @@ def build_payload(
             if (price := _price_number(station)) is not None
         }
         description = (
-            f"{comparison_summary(today, tomorrow)}\n\n"
-            f"**TODAY**\n{format_station_list(today, limit)}\n\n"
-            f"**TOMORROW**\n{format_station_list(tomorrow, limit, today_by_station)}"
+            comparison_summary(today, tomorrow)
         )
         embeds.append(
             {
                 "title": f"{product_name} — {search['suburb']}",
                 "description": description[:DISCORD_DESCRIPTION_LIMIT],
-                "url": source_url,
                 "color": 0x2D7D46,
-                "footer": {"text": "FuelWatch WA • Today vs tomorrow • Source acknowledged"},
+                "fields": [
+                    {
+                        "name": "TODAY",
+                        "value": format_compact_list(today, limit),
+                        "inline": True,
+                    },
+                    {
+                        "name": "TOMORROW",
+                        "value": format_compact_list(tomorrow, limit, today_by_station),
+                        "inline": True,
+                    },
+                ],
+                "footer": {"text": "c/L • ↑ dearer • ↓ cheaper • = unchanged • 50 L comparison"},
             }
         )
+    message = config.get("message", "⛽ Today's and tomorrow's cheapest fuel prices")
     return {
         "username": config.get("discord_username", "FuelWatch WA"),
-        "content": config.get("message", "⛽ Today's and tomorrow's cheapest fuel prices"),
+        "content": f"{message}\nData: [FuelWatch WA](https://www.fuelwatch.wa.gov.au/)",
         "embeds": embeds,
         "allowed_mentions": {"parse": []},
     }

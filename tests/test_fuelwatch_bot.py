@@ -38,6 +38,21 @@ class BotTests(unittest.TestCase):
         line = bot._price_line(station, 1, {bot._station_key(station): 180.0})
         self.assertIn("1.5 c/L dearer", line)
 
+    def test_compact_list_omits_address(self):
+        station = bot.Station("181.5", "Same Fuel", "Brand", "PERTH", "1 Secret Road", "")
+        text = bot.format_compact_list([station], 3, {bot._station_key(station): 180.0})
+        self.assertIn("↑1.5", text)
+        self.assertIn("Same Fuel (Perth)", text)
+        self.assertNotIn("Secret Road", text)
+
+    def test_embed_title_has_no_rss_link(self):
+        station = bot.Station("180.0", "Test Fuel", "", "PERTH", "1 Road", "")
+        config = {"searches": [], "results_per_search": 3}
+        search = {"product": 4, "suburb": "Perth"}
+        payload = bot.build_payload(config, [(search, [station], [station], "https://rss.test")])
+        self.assertNotIn("url", payload["embeds"][0])
+        self.assertEqual(len(payload["embeds"][0]["fields"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
