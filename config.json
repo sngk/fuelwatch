@@ -1,9 +1,8 @@
 {
-  "day": "tomorrow",
   "results_per_search": 5,
   "request_timeout_seconds": 30,
   "discord_username": "FuelWatch WA",
-  "message": "⛽ Tomorrow's cheapest fuel prices",
+  "message": "⛽ Today's and tomorrow's cheapest fuel prices",
   "schedule": {
     "hour": 14,
     "minute": 40,

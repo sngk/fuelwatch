@@ -1,6 +1,6 @@
 # FuelWatch Discord notifier
 
-Fetches tomorrow's prices from the official WA FuelWatch RSS feed and posts the cheapest results to a Discord webhook. The default configuration covers:
+Fetches today's and tomorrow's prices from the official WA FuelWatch RSS feed, compares them, and posts the cheapest results to a Discord webhook. It reports whether tomorrow's cheapest price is cheaper, dearer, or unchanged, estimates the difference for a 50-litre fill, and compares matching stations. The default configuration covers:
 
 - Diesel: Perth, Quinns Rocks, Bayswater
 - Unleaded Petrol: Bayswater, Balcatta
@@ -24,7 +24,7 @@ Edit `config.json`. Each search accepts:
 - `surrounding`: whether FuelWatch should include nearby suburbs
 - `limit`: optional result count overriding `results_per_search`
 
-`day` can be `today`, `tomorrow`, or `yesterday`. The webhook URL is deliberately not stored in the config or committed to Git.
+The bot always requests both `today` and `tomorrow`. The webhook URL is deliberately not stored in the config or committed to Git.
 
 ## Run locally
 

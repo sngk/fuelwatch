@@ -26,6 +26,18 @@ class BotTests(unittest.TestCase):
         now = datetime(2026, 9, 1, 14, 41, tzinfo=bot.AWST)
         self.assertEqual(bot.next_run(now, 14, 40).day, 2)
 
+    def test_comparison_summary_cheaper(self):
+        today = [bot.Station("180.0", "Today Fuel", "", "BAYSWATER", "1 Road", "")]
+        tomorrow = [bot.Station("175.0", "Tomorrow Fuel", "", "BAYSWATER", "2 Road", "")]
+        summary = bot.comparison_summary(today, tomorrow)
+        self.assertIn("5.0 c/L cheaper", summary)
+        self.assertIn("$2.50", summary)
+
+    def test_matching_station_change(self):
+        station = bot.Station("181.5", "Same Fuel", "Brand", "PERTH", "1 Road", "")
+        line = bot._price_line(station, 1, {bot._station_key(station): 180.0})
+        self.assertIn("1.5 c/L dearer", line)
+
 
 if __name__ == "__main__":
     unittest.main()

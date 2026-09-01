@@ -102,38 +102,103 @@ def fetch(search: dict[str, Any], day: str, timeout: int) -> tuple[list[Station]
         return parse_feed(response.read()), url
 
 
-def format_description(stations: list[Station], limit: int) -> str:
+def _price_number(station: Station) -> float | None:
+    try:
+        return float(station.price.replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _station_key(station: Station) -> tuple[str, str]:
+    return (station.name.casefold().strip(), station.address.casefold().strip())
+
+
+def _price_line(station: Station, number: int, comparison: dict[tuple[str, str], float] | None = None) -> str:
+    place = " — ".join(value for value in (station.name, station.brand) if value)
+    location = ", ".join(value for value in (station.address, station.suburb) if value)
+    line = f"**{number}. {station.price} c/L** — {place}"
+    price = _price_number(station)
+    previous = comparison.get(_station_key(station)) if comparison and price is not None else None
+    if previous is not None and price is not None:
+        difference = price - previous
+        if abs(difference) < 0.05:
+            line += " · **unchanged**"
+        elif difference < 0:
+            line += f" · **{abs(difference):.1f} c/L cheaper ↓**"
+        else:
+            line += f" · **{difference:.1f} c/L dearer ↑**"
+    if location:
+        line += f"\n{location}"
+    return line
+
+
+def format_station_list(stations: list[Station], limit: int, comparison: dict[tuple[str, str], float] | None = None) -> str:
     if not stations:
-        return "No prices were returned for this search."
+        return "No prices returned."
     lines: list[str] = []
     for number, station in enumerate(stations[:limit], 1):
-        place = " — ".join(value for value in (station.name, station.brand) if value)
-        location = ", ".join(value for value in (station.address, station.suburb) if value)
-        line = f"**{number}. {station.price} c/L** — {place}"
-        if location:
-            line += f"\n{location}"
-        if len("\n\n".join(lines + [line])) > DISCORD_DESCRIPTION_LIMIT:
+        line = _price_line(station, number, comparison)
+        if len("\n".join(lines + [line])) > DISCORD_DESCRIPTION_LIMIT:
             break
         lines.append(line)
-    return "\n\n".join(lines)
+    return "\n".join(lines)
 
 
-def build_payload(config: dict[str, Any], results: list[tuple[dict[str, Any], list[Station], str]], day: str) -> dict[str, Any]:
+def comparison_summary(today: list[Station], tomorrow: list[Station]) -> str:
+    today_prices = [(price, station) for station in today if (price := _price_number(station)) is not None]
+    tomorrow_prices = [(price, station) for station in tomorrow if (price := _price_number(station)) is not None]
+    if not today_prices or not tomorrow_prices:
+        return "**Comparison:** unavailable until both days have prices."
+    today_price, today_station = min(today_prices, key=lambda value: value[0])
+    tomorrow_price, tomorrow_station = min(tomorrow_prices, key=lambda value: value[0])
+    difference = tomorrow_price - today_price
+    if abs(difference) < 0.05:
+        direction = "unchanged"
+    elif difference < 0:
+        direction = f"**{abs(difference):.1f} c/L cheaper tomorrow ↓**"
+    else:
+        direction = f"**{difference:.1f} c/L dearer tomorrow ↑**"
+    tank_change = abs(difference) * 0.5  # cents/litre × 50 litres, converted to dollars
+    detail = ""
+    if abs(difference) >= 0.05:
+        detail = f" (about **${tank_change:.2f}** on 50 L)"
+    return (
+        f"**Cheapest comparison:** {direction}{detail}\n"
+        f"Today: **{today_price:.1f}** at {today_station.name} · "
+        f"Tomorrow: **{tomorrow_price:.1f}** at {tomorrow_station.name}"
+    )
+
+
+def build_payload(
+    config: dict[str, Any],
+    results: list[tuple[dict[str, Any], list[Station], list[Station], str]],
+) -> dict[str, Any]:
     embeds = []
-    for search, stations, source_url in results:
+    for search, today, tomorrow, source_url in results:
         product_name = PRODUCTS[search["product"]]
+        limit = int(search.get("limit", config.get("results_per_search", 5)))
+        today_by_station = {
+            _station_key(station): price
+            for station in today
+            if (price := _price_number(station)) is not None
+        }
+        description = (
+            f"{comparison_summary(today, tomorrow)}\n\n"
+            f"**TODAY**\n{format_station_list(today, limit)}\n\n"
+            f"**TOMORROW**\n{format_station_list(tomorrow, limit, today_by_station)}"
+        )
         embeds.append(
             {
                 "title": f"{product_name} — {search['suburb']}",
-                "description": format_description(stations, int(search.get("limit", config.get("results_per_search", 5)))),
+                "description": description[:DISCORD_DESCRIPTION_LIMIT],
                 "url": source_url,
                 "color": 0x2D7D46,
-                "footer": {"text": f"FuelWatch WA • {day.title()} prices • Source acknowledged"},
+                "footer": {"text": "FuelWatch WA • Today vs tomorrow • Source acknowledged"},
             }
         )
     return {
         "username": config.get("discord_username", "FuelWatch WA"),
-        "content": config.get("message", "⛽ FuelWatch price update"),
+        "content": config.get("message", "⛽ Today's and tomorrow's cheapest fuel prices"),
         "embeds": embeds,
         "allowed_mentions": {"parse": []},
     }
@@ -153,14 +218,14 @@ def send_discord(webhook_url: str, payload: dict[str, Any], timeout: int) -> Non
 
 
 def run_once(config: dict[str, Any], dry_run: bool = False) -> None:
-    day = str(config.get("day", "tomorrow")).lower()
     timeout = int(config.get("request_timeout_seconds", 30))
     results = []
     for search in config["searches"]:
         logging.info("Fetching %s in %s", PRODUCTS[search["product"]], search["suburb"])
-        stations, source_url = fetch(search, day, timeout)
-        results.append((search, stations, source_url))
-    payload = build_payload(config, results, day)
+        today, _ = fetch(search, "today", timeout)
+        tomorrow, source_url = fetch(search, "tomorrow", timeout)
+        results.append((search, today, tomorrow, source_url))
+    payload = build_payload(config, results)
     if dry_run:
         # ASCII escaping keeps previews printable in legacy Windows consoles.
         print(json.dumps(payload, indent=2, ensure_ascii=True))
