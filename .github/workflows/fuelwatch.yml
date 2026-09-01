@@ -3,7 +3,7 @@ name: Daily FuelWatch notification
 on:
   schedule:
     # 06:40 UTC is 14:40 AWST. Perth does not observe daylight saving time.
-    - cron: "40 6 * * *"
+    - cron: "43 6 * * *"
   workflow_dispatch:
 
 jobs:
