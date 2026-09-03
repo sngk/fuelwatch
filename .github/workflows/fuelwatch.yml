@@ -2,7 +2,7 @@ name: Daily FuelWatch notification
 
 on:
   schedule:
-    - cron: "43 14 * * *"
+    - cron: "43 2 * * *"
   workflow_dispatch:
 
 jobs:
